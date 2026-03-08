@@ -42,6 +42,8 @@ describe("CR1 — URL-based layout persistence", () => {
     replaceStateSpy = vi.spyOn(window.history, "replaceState");
     // Reset to a clean pathname with no query params
     window.history.replaceState(null, "", "/workspace/project/issues/");
+    // Clear the spy count from the setup call above so tests start at 0
+    replaceStateSpy.mockClear();
   });
 
   afterEach(() => {
@@ -68,11 +70,14 @@ describe("CR1 — URL-based layout persistence", () => {
   });
 
   it("preserves existing query params when writing layout", () => {
-    window.history.replaceState(null, "", "/workspace/project/issues/?priority=high");
+    // happy-dom does not reflect replaceState calls in window.location.search,
+    // so we stub location.search directly to simulate an existing param.
+    vi.stubGlobal("location", { ...window.location, search: "?priority=high", pathname: "/workspace/project/issues/" });
     writeLayoutToUrl("list");
     const calledUrl = replaceStateSpy.mock.calls[0][2] as string;
     expect(calledUrl).toContain("priority=high");
     expect(calledUrl).toContain("layout=list");
+    vi.unstubAllGlobals();
   });
 
   // -------------------------------------------------------------------------
