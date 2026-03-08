@@ -66,6 +66,15 @@ export const HeaderFilters = observer(function HeaderFilters(props: Props) {
     (layout: EIssueLayoutTypes) => {
       if (!workspaceSlug || !projectId) return;
       updateFilters(workspaceSlug, projectId, EIssueFilterType.DISPLAY_FILTERS, { layout: layout });
+      // Persist the selected layout to the URL so it survives page refreshes and
+      // can be restored from direct links, without being clobbered by the server default.
+      try {
+        const params = new URLSearchParams(window.location.search);
+        params.set("layout", layout);
+        window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+      } catch (e) {
+        console.warn("[HeaderFilters] Failed to persist layout to URL:", e);
+      }
     },
     [workspaceSlug, projectId, updateFilters]
   );

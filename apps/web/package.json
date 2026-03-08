@@ -10,6 +10,8 @@
     "preview": "react-router build && serve -s build/client -l 3000",
     "start": "serve -s build/client -l 3000",
     "clean": "rm -rf .turbo && rm -rf .next && rm -rf .react-router && rm -rf node_modules && rm -rf dist && rm -rf build",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "check:lint": "eslint . --cache --cache-location node_modules/.cache/eslint/ --max-warnings=14367",
     "check:types": "react-router typegen && tsc --noEmit",
     "check:format": "prettier . --cache --check",
@@ -87,6 +89,8 @@
     "@types/react-dom": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vite-tsconfig-paths": "^5.1.4"
+    "vite-tsconfig-paths": "^5.1.4",
+    "vitest": "^2.1.8",
+    "happy-dom": "^15.0.0"
   }
 }

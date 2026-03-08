@@ -5,10 +5,10 @@
  */
 
 import { observer } from "mobx-react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 // plane constants
-import { ISSUE_DISPLAY_FILTERS_BY_PAGE, PROJECT_VIEW_TRACKER_ELEMENTS } from "@plane/constants";
+import { EIssueFilterType, ISSUE_DISPLAY_FILTERS_BY_PAGE, PROJECT_VIEW_TRACKER_ELEMENTS } from "@plane/constants";
 import { EIssueLayoutTypes, EIssuesStoreType } from "@plane/types";
 import { Spinner } from "@plane/ui";
 // components
@@ -47,6 +47,7 @@ export const ProjectLayoutRoot = observer(function ProjectLayoutRoot() {
   const { workspaceSlug: routerWorkspaceSlug, projectId: routerProjectId } = useParams();
   const workspaceSlug = routerWorkspaceSlug ? routerWorkspaceSlug.toString() : undefined;
   const projectId = routerProjectId ? routerProjectId.toString() : undefined;
+  const searchParams = useSearchParams();
   // hooks
   const { issues, issuesFilter } = useIssues(EIssuesStoreType.PROJECT);
   // derived values
@@ -58,6 +59,18 @@ export const ProjectLayoutRoot = observer(function ProjectLayoutRoot() {
     async () => {
       if (workspaceSlug && projectId) {
         await issuesFilter?.fetchFilters(workspaceSlug, projectId);
+        // Restore layout from URL query param, overriding the server-side default
+        // so the user's selection survives page refreshes and direct links.
+        const urlLayout = searchParams.get("layout");
+        const validLayouts = Object.values(EIssueLayoutTypes) as string[];
+        if (urlLayout && validLayouts.includes(urlLayout)) {
+          const currentLayout = issuesFilter?.getIssueFilters(projectId)?.displayFilters?.layout;
+          if (currentLayout !== (urlLayout as EIssueLayoutTypes)) {
+            await issuesFilter?.updateFilters(workspaceSlug, projectId, EIssueFilterType.DISPLAY_FILTERS, {
+              layout: urlLayout as EIssueLayoutTypes,
+            });
+          }
+        }
       }
     },
     { revalidateIfStale: false, revalidateOnFocus: false }
