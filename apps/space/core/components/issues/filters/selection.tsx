@@ -9,6 +9,8 @@ import { observer } from "mobx-react";
 import { SearchIcon, CloseIcon } from "@plane/propel/icons";
 // types
 import type { IIssueFilterOptions, TIssueFilterKeys } from "@/types/issue";
+// hooks
+import { useDebounce } from "@/hooks/use-debounce";
 // local imports
 import { FilterPriority } from "./priority";
 import { FilterState } from "./state";
@@ -22,7 +24,11 @@ type Props = {
 export const FilterSelection = observer(function FilterSelection(props: Props) {
   const { filters, handleFilters, layoutDisplayFiltersOptions } = props;
 
+  // 1. The instantly updating state for the input field (keeps typing snappy)
   const [filtersSearchQuery, setFiltersSearchQuery] = useState("");
+
+  // 2. The debounced state that only updates 300ms after the user stops typing
+  const debouncedSearchQuery = useDebounce(filtersSearchQuery, 300);
 
   const isFilterEnabled = (filter: keyof IIssueFilterOptions) => layoutDisplayFiltersOptions.includes(filter);
 
@@ -53,7 +59,8 @@ export const FilterSelection = observer(function FilterSelection(props: Props) {
             <FilterPriority
               appliedFilters={filters.priority ?? null}
               handleUpdate={(val) => handleFilters("priority", val)}
-              searchQuery={filtersSearchQuery}
+              // Pass the debounced value to prevent aggressive re-renders
+              searchQuery={debouncedSearchQuery} 
             />
           </div>
         )}
@@ -64,7 +71,8 @@ export const FilterSelection = observer(function FilterSelection(props: Props) {
             <FilterState
               appliedFilters={filters.state ?? null}
               handleUpdate={(val) => handleFilters("state", val)}
-              searchQuery={filtersSearchQuery}
+              // Pass the debounced value to prevent aggressive re-renders
+              searchQuery={debouncedSearchQuery} 
             />
           </div>
         )}
@@ -76,7 +84,7 @@ export const FilterSelection = observer(function FilterSelection(props: Props) {
               appliedFilters={filters.labels ?? null}
               handleUpdate={(val) => handleFilters("labels", val)}
               labels={labels}
-              searchQuery={filtersSearchQuery}
+              searchQuery={debouncedSearchQuery} 
             />
           </div>
         )} */}
