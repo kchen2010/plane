@@ -1,0 +1,4 @@
+## Issue View State Persistence (Added via Change Request)
+Issue layouts (List, Kanban, Calendar, Spreadsheet, Gantt) are now URL-controlled at the project level to enable deep-linking and session persistence. 
+* **Priority Hierarchy:** `URL Query Parameter (?layout=...)` > `User Session Preference (Server)` > `Project Default`.
+* **State Sync:** State synchronization is handled declaratively. UI components should continue to update the MobX `IssuesFilterStore` normally; the `useLayoutUrlSync` hook will automatically observe those changes and push them to the browser's history stack via Next.js router APIs.
