@@ -80,17 +80,26 @@ export const copyUrlToClipboard = async (path: string) => {
 /**
  * @description Gets first character of first word or first characters of first two words
  * @param {string} str - Input string
- * @returns {string} First character(s)
+ * @returns {string} First character(s) capitalized, or "?" if invalid
  * @example
  * getFirstCharacters("John") // returns "J"
- * getFirstCharacters("John Doe") // returns "JD"
+ * getFirstCharacters("john   doe") // returns "JD"
  */
 export const getFirstCharacters = (str: string) => {
-  const words = str.trim().split(" ");
+  // 1. Defensive programming: handle null, undefined, or non-strings
+  if (!str || typeof str !== "string") return "?";
+
+  // 2. Trim whitespace and split by ONE OR MORE spaces (Regex \s+)
+  const words = str.trim().split(/\s+/);
+
+  // 3. Handle empty string case
+  if (words.length === 0 || words[0] === "") return "?";
+
+  // 4. Return uppercase initials
   if (words.length === 1) {
-    return words[0].charAt(0);
+    return words[0].charAt(0).toUpperCase();
   } else {
-    return words[0].charAt(0) + words[1].charAt(0);
+    return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
   }
 };
 
