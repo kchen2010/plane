@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 
+export default useDebounce;
 /**
  * A hook that delays updating its value until a specified delay has passed
  * without any new updates. Perfect for search inputs to prevent excessive re-renders.
