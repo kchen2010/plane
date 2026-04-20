@@ -1,87 +1,133 @@
-// @ts-nocheck
-/// <reference types="jest" />
-import { render, waitFor } from "@testing-library/react";
-import { ProjectLayoutRoot } from "../project-layout-root";
 import { useSearchParams } from "next/navigation";
+import { act } from "react";
+import type React from "react";
+import { createRoot } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// hooks
 import { useIssues } from "@/hooks/store/use-issues";
+// local imports
+import { ProjectLayoutRoot } from "../project-layout-root";
 
-// 1. Mock Next.js Navigation (Simulating the URL)
-jest.mock("next/navigation", () => ({
+vi.mock("next/navigation", () => ({
   useParams: () => ({ workspaceSlug: "test-workspace", projectId: "test-project" }),
-  useSearchParams: jest.fn(),
+  usePathname: () => "/test-workspace/projects/test-project/issues",
+  useRouter: () => ({ replace: vi.fn() }),
+  useSearchParams: vi.fn(),
 }));
 
-// 2. Mock SWR so it executes our restoration logic immediately
-jest.mock("swr", () => (key: any, fetcher: any) => {
-  if (key) fetcher();
-  return { data: undefined, error: undefined };
-});
-
-// 3. Mock the custom hook we created for syncing
-jest.mock("@/hooks/use-layout-url-sync", () => ({
-  useLayoutUrlSync: jest.fn(),
+vi.mock("swr", () => ({
+  default: (key: string | null, fetcher: () => Promise<void>) => {
+    if (key) void fetcher();
+    return { data: undefined, error: undefined };
+  },
 }));
 
-// 4. Mock the Plane MobX Store
-jest.mock("@/hooks/store/use-issues", () => ({
-  useIssues: jest.fn(),
+vi.mock("@/components/work-item-filters/filters-hoc/project-level", () => ({
+  ProjectLevelWorkItemFiltersHOC: ({
+    children,
+    initialWorkItemFilters,
+  }: {
+    children: (props: { filter: unknown }) => React.ReactNode;
+    initialWorkItemFilters: unknown;
+  }) => children({ filter: initialWorkItemFilters }),
 }));
 
-describe("ProjectLayoutRoot - URL Persistence", () => {
-  const mockUpdateFilters = jest.fn();
-  const mockFetchFilters = jest.fn();
+vi.mock("@/components/work-item-filters/filters-row", () => ({
+  WorkItemFiltersRow: () => <div data-testid="filters-row" />,
+}));
+
+vi.mock("../../peek-overview", () => ({
+  IssuePeekOverview: () => <div data-testid="peek-overview" />,
+}));
+
+vi.mock("../calendar/roots/project-root", () => ({
+  CalendarLayout: () => <div data-testid="calendar-layout" />,
+}));
+
+vi.mock("../gantt", () => ({
+  BaseGanttRoot: () => <div data-testid="gantt-layout" />,
+}));
+
+vi.mock("../kanban/roots/project-root", () => ({
+  KanBanLayout: () => <div data-testid="kanban-layout" />,
+}));
+
+vi.mock("../list/roots/project-root", () => ({
+  ListLayout: () => <div data-testid="list-layout" />,
+}));
+
+vi.mock("../spreadsheet/roots/project-root", () => ({
+  ProjectSpreadsheetLayout: () => <div data-testid="spreadsheet-layout" />,
+}));
+
+vi.mock("@/hooks/store/use-issues", () => ({
+  useIssues: vi.fn(),
+}));
+
+describe("ProjectLayoutRoot - URL persistence", () => {
+  const mockUpdateFilters = vi.fn();
+  const mockFetchFilters = vi.fn();
+  const mockUpdateFilterExpression = vi.fn();
+  let root: ReturnType<typeof createRoot> | undefined;
+  let container: HTMLDivElement | undefined;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    
-    // Setup the mock store: Pretend the server thinks the layout is "list"
-    (useIssues as jest.Mock).mockReturnValue({
+    vi.clearAllMocks();
+
+    vi.mocked(useIssues).mockReturnValue({
       issues: { getIssueLoader: () => "loaded" },
       issuesFilter: {
-        issueFilters: {
-          "test-project": { displayFilters: { layout: "list" } },
-        },
+        getIssueFilters: () => ({ displayFilters: { layout: "list" } }),
         fetchFilters: mockFetchFilters,
         updateFilters: mockUpdateFilters,
-        updateFilterExpression: jest.fn(),
+        updateFilterExpression: mockUpdateFilterExpression,
       },
+    } as unknown as ReturnType<typeof useIssues>);
+  });
+
+  afterEach(() => {
+    act(() => {
+      root?.unmount();
+    });
+    container?.remove();
+    root = undefined;
+    container = undefined;
+  });
+
+  const renderProjectLayoutRoot = () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    act(() => {
+      root?.render(<ProjectLayoutRoot />);
+    });
+  };
+
+  it("overrides server layout when URL contains a different valid layout", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams({ layout: "kanban" }) as ReturnType<typeof useSearchParams>
+    );
+
+    renderProjectLayoutRoot();
+
+    await vi.waitFor(() => {
+      expect(mockFetchFilters).toHaveBeenCalledWith("test-workspace", "test-project");
+      expect(mockUpdateFilters).toHaveBeenCalledWith("test-workspace", "test-project", "DISPLAY_FILTERS", {
+        layout: "kanban",
+      });
     });
   });
 
-  it("should override server layout if URL contains a different valid layout", async () => {
-    // Simulate user navigating to the page with ?layout=kanban in the URL
-    (useSearchParams as jest.Mock).mockReturnValue(
-      new URLSearchParams({ layout: "kanban" })
+  it("does not update filters when URL layout matches the server layout", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams({ layout: "list" }) as ReturnType<typeof useSearchParams>
     );
 
-    render(<ProjectLayoutRoot />);
+    renderProjectLayoutRoot();
 
-    await waitFor(() => {
-      // Step 1: It should fetch the initial filters from the server
-      expect(mockFetchFilters).toHaveBeenCalledWith("test-workspace", "test-project"); 
-      
-      // Step 2: It should update the store with the "kanban" layout from the URL
-      expect(mockUpdateFilters).toHaveBeenCalledWith(
-        "test-workspace",
-        "test-project",
-        "DISPLAY_FILTERS",
-        { layout: "kanban" }
-      );
-    });
-  });
-
-  it("should NOT call updateFilters if URL layout matches the server layout", async () => {
-    // Simulate user navigating to ?layout=list (which matches the server default)
-    (useSearchParams as jest.Mock).mockReturnValue(
-      new URLSearchParams({ layout: "list" })
-    );
-
-    render(<ProjectLayoutRoot />);
-
-    await waitFor(() => {
-      // It should fetch filters...
-      expect(mockFetchFilters).toHaveBeenCalled();
-      // ...but it should NOT redundantly update the store
+    await vi.waitFor(() => {
+      expect(mockFetchFilters).toHaveBeenCalledWith("test-workspace", "test-project");
       expect(mockUpdateFilters).not.toHaveBeenCalled();
     });
   });

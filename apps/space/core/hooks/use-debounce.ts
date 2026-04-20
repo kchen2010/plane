@@ -4,9 +4,9 @@
  * See the LICENSE file for details.
  */
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 
-const useDebounce = <T,>(value: T, milliSeconds: number): T => {
+function useDebounce<T>(value: T, milliSeconds = 300): T {
   const [debouncedValue, setDebouncedValue] = useState(value);
 
   useEffect(() => {
@@ -20,6 +20,6 @@ const useDebounce = <T,>(value: T, milliSeconds: number): T => {
   }, [value, milliSeconds]);
 
   return debouncedValue;
-};
+}
 
 export default useDebounce;

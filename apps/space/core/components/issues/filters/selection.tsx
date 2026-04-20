@@ -10,7 +10,7 @@ import { SearchIcon, CloseIcon } from "@plane/propel/icons";
 // types
 import type { IIssueFilterOptions, TIssueFilterKeys } from "@/types/issue";
 // hooks
-import { useDebounce } from "@/hooks/use-debounce";
+import useDebounce from "@/hooks/use-debounce";
 // local imports
 import { FilterPriority } from "./priority";
 import { FilterState } from "./state";
@@ -59,8 +59,7 @@ export const FilterSelection = observer(function FilterSelection(props: Props) {
             <FilterPriority
               appliedFilters={filters.priority ?? null}
               handleUpdate={(val) => handleFilters("priority", val)}
-              // Pass the debounced value to prevent aggressive re-renders
-              searchQuery={debouncedSearchQuery} 
+              searchQuery={debouncedSearchQuery}
             />
           </div>
         )}
@@ -71,8 +70,7 @@ export const FilterSelection = observer(function FilterSelection(props: Props) {
             <FilterState
               appliedFilters={filters.state ?? null}
               handleUpdate={(val) => handleFilters("state", val)}
-              // Pass the debounced value to prevent aggressive re-renders
-              searchQuery={debouncedSearchQuery} 
+              searchQuery={debouncedSearchQuery}
             />
           </div>
         )}
@@ -84,7 +82,7 @@ export const FilterSelection = observer(function FilterSelection(props: Props) {
               appliedFilters={filters.labels ?? null}
               handleUpdate={(val) => handleFilters("labels", val)}
               labels={labels}
-              searchQuery={debouncedSearchQuery} 
+              searchQuery={debouncedSearchQuery}
             />
           </div>
         )} */}

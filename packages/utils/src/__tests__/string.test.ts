@@ -1,6 +1,4 @@
-// @ts-nocheck
-/// <reference types="jest" />
-
+import { describe, expect, it } from "vitest";
 import { getFirstCharacters } from "../string";
 
 describe("string utils - getFirstCharacters", () => {
@@ -31,7 +29,7 @@ describe("string utils - getFirstCharacters", () => {
   });
 
   it("should return a fallback '?' for null or undefined inputs", () => {
-    expect(getFirstCharacters(null as any)).toBe("?");
-    expect(getFirstCharacters(undefined as any)).toBe("?");
+    expect(getFirstCharacters(null)).toBe("?");
+    expect(getFirstCharacters(undefined)).toBe("?");
   });
 });

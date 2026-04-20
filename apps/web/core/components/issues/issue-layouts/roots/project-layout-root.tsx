@@ -17,7 +17,8 @@ import { WorkItemFiltersRow } from "@/components/work-item-filters/filters-row";
 // hooks
 import { useIssues } from "@/hooks/store/use-issues";
 import { IssuesStoreContext } from "@/hooks/use-issue-layout-store";
-import { useLayoutUrlSync } from "@/hooks/use-layout-url-sync"; 
+import { useLayoutUrlSync } from "@/hooks/use-layout-url-sync";
+import type { IProjectIssuesFilter } from "@/store/issue/project/filter.store";
 // local imports
 import { IssuePeekOverview } from "../../peek-overview";
 import { CalendarLayout } from "../calendar/roots/project-root";
@@ -28,12 +29,18 @@ import { ProjectSpreadsheetLayout } from "../spreadsheet/roots/project-root";
 
 function ProjectIssueLayout(props: { activeLayout: EIssueLayoutTypes | undefined }) {
   switch (props.activeLayout) {
-    case EIssueLayoutTypes.LIST: return <ListLayout />;
-    case EIssueLayoutTypes.KANBAN: return <KanBanLayout />;
-    case EIssueLayoutTypes.CALENDAR: return <CalendarLayout />;
-    case EIssueLayoutTypes.GANTT: return <BaseGanttRoot />;
-    case EIssueLayoutTypes.SPREADSHEET: return <ProjectSpreadsheetLayout />;
-    default: return null;
+    case EIssueLayoutTypes.LIST:
+      return <ListLayout />;
+    case EIssueLayoutTypes.KANBAN:
+      return <KanBanLayout />;
+    case EIssueLayoutTypes.CALENDAR:
+      return <CalendarLayout />;
+    case EIssueLayoutTypes.GANTT:
+      return <BaseGanttRoot />;
+    case EIssueLayoutTypes.SPREADSHEET:
+      return <ProjectSpreadsheetLayout />;
+    default:
+      return null;
   }
 }
 
@@ -44,34 +51,28 @@ export const ProjectLayoutRoot = observer(function ProjectLayoutRoot() {
   const searchParams = useSearchParams();
 
   const { issues, issuesFilter } = useIssues(EIssuesStoreType.PROJECT);
+  const projectIssuesFilter = issuesFilter as IProjectIssuesFilter | undefined;
 
-  // FIX TS7053: issueFilters is already the filter object, no need to index it.
-  const workItemFilters = issuesFilter?.issueFilters as any;
+  const workItemFilters = projectId ? projectIssuesFilter?.getIssueFilters(projectId) : undefined;
   const activeLayout = workItemFilters?.displayFilters?.layout;
 
-  // Sync state changes back to URL
   useLayoutUrlSync(activeLayout);
 
   useSWR(
     workspaceSlug && projectId ? `PROJECT_ISSUES_${workspaceSlug}_${projectId}` : null,
     async () => {
       if (workspaceSlug && projectId) {
-        // FIX TS2554: Bypass union signature confusion by casting to any
-        await (issuesFilter as any)?.fetchFilters(workspaceSlug, projectId);
-        
+        await projectIssuesFilter?.fetchFilters(workspaceSlug, projectId);
+
         const urlLayout = searchParams.get("layout");
         const validLayouts = Object.values(EIssueLayoutTypes) as string[];
-        
+
         if (urlLayout && validLayouts.includes(urlLayout)) {
-          const currentLayout = (issuesFilter?.issueFilters as any)?.displayFilters?.layout;
+          const currentLayout = projectIssuesFilter?.getIssueFilters(projectId)?.displayFilters?.layout;
           if (currentLayout !== (urlLayout as EIssueLayoutTypes)) {
-            // Revert to original correct argument count, bypass TS union limits
-            await (issuesFilter as any)?.updateFilters(
-              workspaceSlug, 
-              projectId, 
-              EIssueFilterType.DISPLAY_FILTERS, 
-              { layout: urlLayout as EIssueLayoutTypes }
-            );
+            await projectIssuesFilter?.updateFilters(workspaceSlug, projectId, EIssueFilterType.DISPLAY_FILTERS, {
+              layout: urlLayout as EIssueLayoutTypes,
+            });
           }
         }
       }
@@ -79,7 +80,7 @@ export const ProjectLayoutRoot = observer(function ProjectLayoutRoot() {
     { revalidateIfStale: false, revalidateOnFocus: false }
   );
 
-  if (!workspaceSlug || !projectId || !workItemFilters) return <></>;
+  if (!workspaceSlug || !projectId || !projectIssuesFilter || !workItemFilters) return <></>;
 
   return (
     <IssuesStoreContext.Provider value={EIssuesStoreType.PROJECT}>
@@ -89,10 +90,9 @@ export const ProjectLayoutRoot = observer(function ProjectLayoutRoot() {
         entityId={projectId}
         filtersToShowByLayout={ISSUE_DISPLAY_FILTERS_BY_PAGE.issues.filters}
         initialWorkItemFilters={workItemFilters}
-        // Use type assertion to silence the union method signature conflicts
-        updateFilters={(updatedFilters) => 
-            (issuesFilter as any)?.updateFilterExpression(workspaceSlug, projectId, updatedFilters)
-        }
+        updateFilters={(updatedFilters) => {
+          void projectIssuesFilter.updateFilterExpression(workspaceSlug, projectId, updatedFilters);
+        }}
         projectId={projectId}
         workspaceSlug={workspaceSlug}
       >

@@ -1,25 +1,25 @@
-import { useState, useEffect } from "react";
-
-export default useDebounce;
 /**
- * A hook that delays updating its value until a specified delay has passed
- * without any new updates. Perfect for search inputs to prevent excessive re-renders.
+ * Copyright (c) 2023-present Plane Software, Inc. and contributors
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * See the LICENSE file for details.
  */
-export function useDebounce<T>(value: T, delay: number = 300): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+import { useEffect, useState } from "react";
+
+export function useDebounce<T>(value: T, milliSeconds = 300): T {
+  const [debouncedValue, setDebouncedValue] = useState(value);
 
   useEffect(() => {
-    // Set a timer to update the debounced value after the delay
-    const timer = setTimeout(() => {
+    const handler = setTimeout(() => {
       setDebouncedValue(value);
-    }, delay);
+    }, milliSeconds);
 
-    // Cleanup function: If the user types again before the delay finishes,
-    // this clears the previous timer, preventing the old value from setting.
     return () => {
-      clearTimeout(timer);
+      clearTimeout(handler);
     };
-  }, [value, delay]);
+  }, [value, milliSeconds]);
 
   return debouncedValue;
 }
+
+export default useDebounce;
