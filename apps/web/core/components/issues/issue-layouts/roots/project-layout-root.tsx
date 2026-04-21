@@ -25,21 +25,18 @@ import { KanBanLayout } from "../kanban/roots/project-root";
 import { ListLayout } from "../list/roots/project-root";
 import { ProjectSpreadsheetLayout } from "../spreadsheet/roots/project-root";
 
+// Lookup map: adding a new layout type requires only one new entry here.
+const LAYOUT_COMPONENT_MAP: Record<EIssueLayoutTypes, JSX.Element | null> = {
+  [EIssueLayoutTypes.LIST]: <ListLayout />,
+  [EIssueLayoutTypes.KANBAN]: <KanBanLayout />,
+  [EIssueLayoutTypes.CALENDAR]: <CalendarLayout />,
+  [EIssueLayoutTypes.GANTT]: <BaseGanttRoot />,
+  [EIssueLayoutTypes.SPREADSHEET]: <ProjectSpreadsheetLayout />,
+};
+
 function ProjectIssueLayout(props: { activeLayout: EIssueLayoutTypes | undefined }) {
-  switch (props.activeLayout) {
-    case EIssueLayoutTypes.LIST:
-      return <ListLayout />;
-    case EIssueLayoutTypes.KANBAN:
-      return <KanBanLayout />;
-    case EIssueLayoutTypes.CALENDAR:
-      return <CalendarLayout />;
-    case EIssueLayoutTypes.GANTT:
-      return <BaseGanttRoot />;
-    case EIssueLayoutTypes.SPREADSHEET:
-      return <ProjectSpreadsheetLayout />;
-    default:
-      return null;
-  }
+  if (!props.activeLayout) return null;
+  return LAYOUT_COMPONENT_MAP[props.activeLayout] ?? null;
 }
 
 export const ProjectLayoutRoot = observer(function ProjectLayoutRoot() {
@@ -58,7 +55,11 @@ export const ProjectLayoutRoot = observer(function ProjectLayoutRoot() {
     workspaceSlug && projectId ? `PROJECT_ISSUES_${workspaceSlug}_${projectId}` : null,
     async () => {
       if (workspaceSlug && projectId) {
-        await issuesFilter?.fetchFilters(workspaceSlug, projectId);
+        try {
+          await issuesFilter?.fetchFilters(workspaceSlug, projectId);
+        } catch (error) {
+          console.error("[ProjectLayoutRoot] Failed to fetch filters — rendering with defaults:", error);
+        }
         // Restore layout from URL query param, overriding the server-side default
         // so the user's selection survives page refreshes and direct links.
         const urlLayout = searchParams.get("layout");
@@ -85,7 +86,9 @@ export const ProjectLayoutRoot = observer(function ProjectLayoutRoot() {
         entityId={projectId}
         filtersToShowByLayout={ISSUE_DISPLAY_FILTERS_BY_PAGE.issues.filters}
         initialWorkItemFilters={workItemFilters}
-        updateFilters={issuesFilter?.updateFilterExpression.bind(issuesFilter, workspaceSlug, projectId)}
+        updateFilters={(...args) =>
+          void issuesFilter?.updateFilterExpression.bind(issuesFilter, workspaceSlug, projectId)(...args)
+        }
         projectId={projectId}
         workspaceSlug={workspaceSlug}
       >
