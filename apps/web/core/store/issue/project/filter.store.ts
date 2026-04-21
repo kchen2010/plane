@@ -20,7 +20,7 @@ import type {
   TWorkItemFilterExpression,
   TSupportedFilterForUpdate,
 } from "@plane/types";
-import { EIssuesStoreType } from "@plane/types";
+import { EIssueLayoutTypes, EIssuesStoreType } from "@plane/types";
 import { handleIssueQueryParamsByLayout } from "@plane/utils";
 import type { IBaseIssueFilterStore } from "../helpers/issue-filter-helper.store";
 import { IssueFilterHelperStore } from "../helpers/issue-filter-helper.store";
@@ -148,14 +148,14 @@ export class ProjectIssuesFilter extends IssueFilterHelperStore implements IProj
     };
     const currentUserId = this.rootIssueStore.currentUserId;
     if (currentUserId) {
-      const _kanbanFilters = this.handleIssuesLocalFilters.get(
+      const _localFilters = this.handleIssuesLocalFilters.get(
         EIssuesStoreType.PROJECT,
         workspaceSlug,
         projectId,
         currentUserId
-      );
-      kanbanFilters.group_by = _kanbanFilters?.kanban_filters?.group_by || [];
-      kanbanFilters.sub_group_by = _kanbanFilters?.kanban_filters?.sub_group_by || [];
+      ) as { kanban_filters?: { group_by?: string[]; sub_group_by?: string[] } } | undefined;
+      kanbanFilters.group_by = _localFilters?.kanban_filters?.group_by || [];
+      kanbanFilters.sub_group_by = _localFilters?.kanban_filters?.sub_group_by || [];
     }
 
     runInAction(() => {
@@ -181,122 +181,145 @@ export class ProjectIssuesFilter extends IssueFilterHelperStore implements IProj
         set(this.filters, [projectId, "richFilters"], filters);
       });
 
-      this.rootIssueStore.projectIssues.fetchIssuesWithExistingPagination(workspaceSlug, projectId, "mutation");
+      void this.rootIssueStore.projectIssues.fetchIssuesWithExistingPagination(workspaceSlug, projectId, "mutation");
       await this.projectService.updateProjectUserProperties(workspaceSlug, projectId, {
         rich_filters: filters,
       });
     } catch (error) {
-      console.log("error while updating rich filters", error);
+      console.error("error while updating rich filters", error);
       throw error;
     }
   };
+
+  private async _applyDisplayFilters(
+    workspaceSlug: string,
+    projectId: string,
+    updatedDisplayFilters: IIssueDisplayFilterOptions,
+    currentDisplayFilters: IIssueDisplayFilterOptions
+  ): Promise<void> {
+    const mergedFilters: IIssueDisplayFilterOptions = { ...currentDisplayFilters, ...updatedDisplayFilters };
+
+    // clear sub_group_by when group_by is unset
+    if (mergedFilters.group_by === null) {
+      mergedFilters.sub_group_by = null;
+      updatedDisplayFilters.sub_group_by = null;
+    }
+    // kanban cannot have the same group_by and sub_group_by
+    if (mergedFilters.layout === EIssueLayoutTypes.KANBAN && mergedFilters.group_by === mergedFilters.sub_group_by) {
+      mergedFilters.sub_group_by = null;
+      updatedDisplayFilters.sub_group_by = null;
+    }
+    // kanban requires a group_by; default to state when switching from an ungrouped layout
+    if (mergedFilters.layout === EIssueLayoutTypes.KANBAN && mergedFilters.group_by === null) {
+      mergedFilters.group_by = "state";
+      updatedDisplayFilters.group_by = "state";
+    }
+
+    runInAction(() => {
+      Object.keys(updatedDisplayFilters).forEach((_key) => {
+        set(
+          this.filters,
+          [projectId, "displayFilters", _key],
+          updatedDisplayFilters[_key as keyof IIssueDisplayFilterOptions]
+        );
+      });
+    });
+
+    if (this.getShouldClearIssues(updatedDisplayFilters)) {
+      this.rootIssueStore.projectIssues.clear(true);
+    }
+    if (this.getShouldReFetchIssues(updatedDisplayFilters)) {
+      void this.rootIssueStore.projectIssues.fetchIssuesWithExistingPagination(workspaceSlug, projectId, "mutation");
+    }
+
+    await this.projectService.updateProjectUserProperties(workspaceSlug, projectId, {
+      display_filters: mergedFilters,
+    });
+  }
+
+  private async _applyDisplayProperties(
+    workspaceSlug: string,
+    projectId: string,
+    updatedDisplayProperties: IIssueDisplayProperties,
+    currentDisplayProperties: IIssueDisplayProperties
+  ): Promise<void> {
+    const mergedProperties: IIssueDisplayProperties = { ...currentDisplayProperties, ...updatedDisplayProperties };
+
+    runInAction(() => {
+      Object.keys(updatedDisplayProperties).forEach((_key) => {
+        set(
+          this.filters,
+          [projectId, "displayProperties", _key],
+          updatedDisplayProperties[_key as keyof IIssueDisplayProperties]
+        );
+      });
+    });
+
+    await this.projectService.updateProjectUserProperties(workspaceSlug, projectId, {
+      display_properties: mergedProperties,
+    });
+  }
+
+  private _applyKanbanFilters(
+    workspaceSlug: string,
+    projectId: string,
+    updatedKanbanFilters: TIssueKanbanFilters,
+    currentKanbanFilters: TIssueKanbanFilters
+  ): void {
+    const mergedKanbanFilters: TIssueKanbanFilters = { ...currentKanbanFilters, ...updatedKanbanFilters };
+
+    const currentUserId = this.rootIssueStore.currentUserId;
+    if (currentUserId)
+      this.handleIssuesLocalFilters.set(
+        EIssuesStoreType.PROJECT,
+        EIssueFilterType.KANBAN_FILTERS,
+        workspaceSlug,
+        projectId,
+        currentUserId,
+        { kanban_filters: mergedKanbanFilters }
+      );
+
+    runInAction(() => {
+      Object.keys(updatedKanbanFilters).forEach((_key) => {
+        set(this.filters, [projectId, "kanbanFilters", _key], updatedKanbanFilters[_key as keyof TIssueKanbanFilters]);
+      });
+    });
+  }
 
   updateFilters: IProjectIssuesFilter["updateFilters"] = async (workspaceSlug, projectId, type, filters) => {
     try {
       if (isEmpty(this.filters) || isEmpty(this.filters[projectId])) return;
 
-      const _filters = {
-        richFilters: this.filters[projectId].richFilters,
-        displayFilters: this.filters[projectId].displayFilters as IIssueDisplayFilterOptions,
-        displayProperties: this.filters[projectId].displayProperties as IIssueDisplayProperties,
-        kanbanFilters: this.filters[projectId].kanbanFilters as TIssueKanbanFilters,
-      };
-
       switch (type) {
-        case EIssueFilterType.DISPLAY_FILTERS: {
-          const updatedDisplayFilters = filters as IIssueDisplayFilterOptions;
-          _filters.displayFilters = { ..._filters.displayFilters, ...updatedDisplayFilters };
-
-          // set sub_group_by to null if group_by is set to null
-          if (_filters.displayFilters.group_by === null) {
-            _filters.displayFilters.sub_group_by = null;
-            updatedDisplayFilters.sub_group_by = null;
-          }
-          // set sub_group_by to null if layout is switched to kanban group_by and sub_group_by are same
-          if (
-            _filters.displayFilters.layout === "kanban" &&
-            _filters.displayFilters.group_by === _filters.displayFilters.sub_group_by
-          ) {
-            _filters.displayFilters.sub_group_by = null;
-            updatedDisplayFilters.sub_group_by = null;
-          }
-          // set group_by to state if layout is switched to kanban and group_by is null
-          if (_filters.displayFilters.layout === "kanban" && _filters.displayFilters.group_by === null) {
-            _filters.displayFilters.group_by = "state";
-            updatedDisplayFilters.group_by = "state";
-          }
-
-          runInAction(() => {
-            Object.keys(updatedDisplayFilters).forEach((_key) => {
-              set(
-                this.filters,
-                [projectId, "displayFilters", _key],
-                updatedDisplayFilters[_key as keyof IIssueDisplayFilterOptions]
-              );
-            });
-          });
-
-          if (this.getShouldClearIssues(updatedDisplayFilters)) {
-            this.rootIssueStore.projectIssues.clear(true); // clear issues for local store when some filters like layout changes
-          }
-
-          if (this.getShouldReFetchIssues(updatedDisplayFilters)) {
-            this.rootIssueStore.projectIssues.fetchIssuesWithExistingPagination(workspaceSlug, projectId, "mutation");
-          }
-
-          await this.projectService.updateProjectUserProperties(workspaceSlug, projectId, {
-            display_filters: _filters.displayFilters,
-          });
-
+        case EIssueFilterType.DISPLAY_FILTERS:
+          await this._applyDisplayFilters(
+            workspaceSlug,
+            projectId,
+            filters as IIssueDisplayFilterOptions,
+            this.filters[projectId].displayFilters as IIssueDisplayFilterOptions
+          );
           break;
-        }
-        case EIssueFilterType.DISPLAY_PROPERTIES: {
-          const updatedDisplayProperties = filters as IIssueDisplayProperties;
-          _filters.displayProperties = { ..._filters.displayProperties, ...updatedDisplayProperties };
-
-          runInAction(() => {
-            Object.keys(updatedDisplayProperties).forEach((_key) => {
-              set(
-                this.filters,
-                [projectId, "displayProperties", _key],
-                updatedDisplayProperties[_key as keyof IIssueDisplayProperties]
-              );
-            });
-          });
-
-          await this.projectService.updateProjectUserProperties(workspaceSlug, projectId, {
-            display_properties: _filters.displayProperties,
-          });
+        case EIssueFilterType.DISPLAY_PROPERTIES:
+          await this._applyDisplayProperties(
+            workspaceSlug,
+            projectId,
+            filters as IIssueDisplayProperties,
+            this.filters[projectId].displayProperties as IIssueDisplayProperties
+          );
           break;
-        }
-
-        case EIssueFilterType.KANBAN_FILTERS: {
-          const updatedKanbanFilters = filters as TIssueKanbanFilters;
-          _filters.kanbanFilters = { ..._filters.kanbanFilters, ...updatedKanbanFilters };
-
-          const currentUserId = this.rootIssueStore.currentUserId;
-          if (currentUserId)
-            this.handleIssuesLocalFilters.set(EIssuesStoreType.PROJECT, type, workspaceSlug, projectId, currentUserId, {
-              kanban_filters: _filters.kanbanFilters,
-            });
-
-          runInAction(() => {
-            Object.keys(updatedKanbanFilters).forEach((_key) => {
-              set(
-                this.filters,
-                [projectId, "kanbanFilters", _key],
-                updatedKanbanFilters[_key as keyof TIssueKanbanFilters]
-              );
-            });
-          });
-
+        case EIssueFilterType.KANBAN_FILTERS:
+          this._applyKanbanFilters(
+            workspaceSlug,
+            projectId,
+            filters as TIssueKanbanFilters,
+            this.filters[projectId].kanbanFilters as TIssueKanbanFilters
+          );
           break;
-        }
         default:
           break;
       }
     } catch (error) {
-      this.fetchFilters(workspaceSlug, projectId);
+      void this.fetchFilters(workspaceSlug, projectId);
       throw error;
     }
   };
