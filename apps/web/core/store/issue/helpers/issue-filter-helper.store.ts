@@ -67,6 +67,13 @@ export interface IIssueFilterHelperStore {
   computedDisplayProperties(filters: IIssueDisplayProperties): IIssueDisplayProperties;
 }
 
+// Keys whose change triggers a server-side issue re-fetch
+const DISPLAY_FILTER_REFETCH_KEYS = ["order_by", "sub_issue", "type"] as const;
+// Keys whose change clears the local issue cache (e.g. switching layout resets pagination)
+const LAYOUT_CHANGE_CLEARS_ISSUES = ["layout"] as const;
+// Expand param required by the Gantt layout to load dependency relationships
+const GANTT_EXPAND_PARAM = "issue_relation,issue_related";
+
 export class IssueFilterHelperStore implements IIssueFilterHelperStore {
   constructor() {}
 
@@ -120,7 +127,7 @@ export class IssueFilterHelperStore implements IIssueFilterHelperStore {
     if (displayFilters?.layout) issueFiltersParams.layout = displayFilters?.layout;
 
     if (ENABLE_ISSUE_DEPENDENCIES && displayFilters?.layout === EIssueLayoutTypes.GANTT)
-      issueFiltersParams["expand"] = "issue_relation,issue_related";
+      issueFiltersParams["expand"] = GANTT_EXPAND_PARAM;
 
     return issueFiltersParams;
   };
@@ -197,9 +204,9 @@ export class IssueFilterHelperStore implements IIssueFilterHelperStore {
     getComputedDisplayProperties(displayProperties);
 
   handleIssuesLocalFilters = {
-    fetchFiltersFromStorage: () => {
+    fetchFiltersFromStorage: (): ILocalStoreIssueFilters[] => {
       const _filters = storage.get("issue_local_filters");
-      return _filters ? JSON.parse(_filters) : [];
+      return _filters ? (JSON.parse(_filters) as ILocalStoreIssueFilters[]) : [];
     },
 
     get: (
@@ -208,7 +215,7 @@ export class IssueFilterHelperStore implements IIssueFilterHelperStore {
       viewId: string | undefined, // It can be projectId, moduleId, cycleId, projectViewId
       userId: string | undefined
     ) => {
-      const storageFilters = this.handleIssuesLocalFilters.fetchFiltersFromStorage();
+      const storageFilters: ILocalStoreIssueFilters[] = this.handleIssuesLocalFilters.fetchFiltersFromStorage();
       const currentFilterIndex = storageFilters.findIndex(
         (filter: ILocalStoreIssueFilters) =>
           filter.key === currentView &&
@@ -229,7 +236,7 @@ export class IssueFilterHelperStore implements IIssueFilterHelperStore {
       userId: string | undefined,
       filters: Partial<IIssueFiltersResponse & { kanban_filters: TIssueKanbanFilters }>
     ) => {
-      const storageFilters = this.handleIssuesLocalFilters.fetchFiltersFromStorage();
+      const storageFilters: ILocalStoreIssueFilters[] = this.handleIssuesLocalFilters.fetchFiltersFromStorage();
       const currentFilterIndex = storageFilters.findIndex(
         (filter: ILocalStoreIssueFilters) =>
           filter.key === currentView &&
@@ -265,26 +272,18 @@ export class IssueFilterHelperStore implements IIssueFilterHelperStore {
    * @returns
    */
   getShouldReFetchIssues = (displayFilters: IIssueDisplayFilterOptions) => {
-    const NON_SERVER_DISPLAY_FILTERS = ["order_by", "sub_issue", "type"];
     const displayFilterKeys = Object.keys(displayFilters);
-
-    return NON_SERVER_DISPLAY_FILTERS.some((serverDisplayfilter: string) =>
-      displayFilterKeys.includes(serverDisplayfilter)
-    );
+    return DISPLAY_FILTER_REFETCH_KEYS.some((key) => displayFilterKeys.includes(key));
   };
 
   /**
-   * This Method returns true if the display properties changed requires a server side update
+   * This Method returns true if the display properties changed requires clearing the local issue cache
    * @param displayFilters
    * @returns
    */
   getShouldClearIssues = (displayFilters: IIssueDisplayFilterOptions) => {
-    const NON_SERVER_DISPLAY_FILTERS = ["layout"];
     const displayFilterKeys = Object.keys(displayFilters);
-
-    return NON_SERVER_DISPLAY_FILTERS.some((serverDisplayfilter: string) =>
-      displayFilterKeys.includes(serverDisplayfilter)
-    );
+    return LAYOUT_CHANGE_CLEARS_ISSUES.some((key) => displayFilterKeys.includes(key));
   };
 
   /**
@@ -303,7 +302,8 @@ export class IssueFilterHelperStore implements IIssueFilterHelperStore {
     groupId?: string,
     subGroupId?: string
   ) {
-    // if cursor exists, use the cursor. If it doesn't exist construct the cursor based on per page count
+    // Cursor format: "perPageCount:pageNumber:offset"
+    // groupId present → page 1 (group-level list starts at page 1); root list starts at page 0.
     const pageCursor = cursor ? cursor : groupId ? `${options.perPageCount}:1:0` : `${options.perPageCount}:0:0`;
 
     // pagination params

@@ -27,21 +27,18 @@ import { KanBanLayout } from "../kanban/roots/project-root";
 import { ListLayout } from "../list/roots/project-root";
 import { ProjectSpreadsheetLayout } from "../spreadsheet/roots/project-root";
 
+const LAYOUT_COMPONENT_MAP: Record<EIssueLayoutTypes, JSX.Element | null> = {
+  [EIssueLayoutTypes.LIST]: <ListLayout />,
+  [EIssueLayoutTypes.KANBAN]: <KanBanLayout />,
+  [EIssueLayoutTypes.CALENDAR]: <CalendarLayout />,
+  [EIssueLayoutTypes.GANTT]: <BaseGanttRoot />,
+  [EIssueLayoutTypes.SPREADSHEET]: <ProjectSpreadsheetLayout />,
+};
+
 function ProjectIssueLayout(props: { activeLayout: EIssueLayoutTypes | undefined }) {
-  switch (props.activeLayout) {
-    case EIssueLayoutTypes.LIST:
-      return <ListLayout />;
-    case EIssueLayoutTypes.KANBAN:
-      return <KanBanLayout />;
-    case EIssueLayoutTypes.CALENDAR:
-      return <CalendarLayout />;
-    case EIssueLayoutTypes.GANTT:
-      return <BaseGanttRoot />;
-    case EIssueLayoutTypes.SPREADSHEET:
-      return <ProjectSpreadsheetLayout />;
-    default:
-      return null;
-  }
+  if (!props.activeLayout) return null;
+
+  return LAYOUT_COMPONENT_MAP[props.activeLayout] ?? null;
 }
 
 export const ProjectLayoutRoot = observer(function ProjectLayoutRoot() {
@@ -62,7 +59,11 @@ export const ProjectLayoutRoot = observer(function ProjectLayoutRoot() {
     workspaceSlug && projectId ? `PROJECT_ISSUES_${workspaceSlug}_${projectId}` : null,
     async () => {
       if (workspaceSlug && projectId) {
-        await projectIssuesFilter?.fetchFilters(workspaceSlug, projectId);
+        try {
+          await projectIssuesFilter?.fetchFilters(workspaceSlug, projectId);
+        } catch (error) {
+          console.error("[ProjectLayoutRoot] Failed to fetch filters - rendering with defaults:", error);
+        }
 
         const urlLayout = searchParams.get("layout");
         const validLayouts = Object.values(EIssueLayoutTypes) as string[];
